@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Review Processor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            text-align: center;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        button:hover:not(:disabled) {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>Review Processor</h1>
+    <input type="file" id="fileInput" accept=".csv">
+    <button onclick="processFile()">Process</button>
+    <button id="downloadBtn" onclick="downloadExcel()" disabled>Download Excel</button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+        let processedData = [];
+
+        async function processFile() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert("Please upload a CSV file!");
+                return;
+            }
+
+            Papa.parse(file, {
+                header: true,
+                complete: async function(results) {
+                    const reviews = results.data.map(row => row["Online_Review"]).filter(r => r);
+                    const response = await sendToAppsScript(reviews);
+                    processedData = results.data.map((row, index) => ({
+                        ...row,
+                        "Main_Category": response[index][0],
+                        "Sub_Category_1": response[index][1],
+                        "Sub_Category_2": response[index][2]
+                    }));
+                    document.getElementById('downloadBtn').disabled = false;
+                    alert("File processed successfully!");
+                }
+            });
+        }
+
+        async function sendToAppsScript(reviews) {
+            // Thay URL này bằng URL của Google Apps Script Web App sau khi deploy
+            const scriptUrl = "https://script.google.com/macros/s/AKfycbzSJrS4hUrwK2Ewh3HNdZ5l8wZ56ObFgWQ9h25MOWjF7KSUJwduQDwwLDtuoh_Q_5GE/exec";
+            const response = await fetch(scriptUrl, {
+                method: "POST",
+                body: JSON.stringify({ reviews }),
+                headers: { "Content-Type": "application/json" }
+            });
+            if (!response.ok) {
+                throw new Error("Failed to fetch data from Apps Script");
+            }
+            return await response.json();
+        }
+
+        function downloadExcel() {
+            const worksheet = XLSX.utils.json_to_sheet(processedData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Reviews");
+            XLSX.writeFile(workbook, "processed_reviews.xlsx");
+        }
+    </script>
+</body>
+</html>
